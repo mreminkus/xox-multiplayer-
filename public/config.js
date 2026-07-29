@@ -6,4 +6,4 @@
 // çalışır. Bu, localde `npm start` ile test ederken doğru çalışır ama
 // Netlify'da (frontend ile backend farklı adreslerde olduğu için) ÇALIŞMAZ —
 // Netlify'a yüklemeden önce burayı mutlaka backend URL'in ile doldur.
-window.XOX_SERVER_URL = "";
+window.XOX_SERVER_URL = "https://xox-multiplayer.onrender.com";
