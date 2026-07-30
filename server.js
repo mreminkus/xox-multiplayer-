@@ -152,8 +152,11 @@ function tickPlayers() {
     if (player.busy) continue;
     const { forward, backward, turnLeft, turnRight } = player.input;
 
-    if (turnLeft) player.facing -= TURN_SPEED;
-    if (turnRight) player.facing += TURN_SPEED;
+    // the chase camera's screen-right corresponds to world -X at facing=0
+    // (Three.js lookAt: right = up × (cameraPos-target)), so increasing
+    // `facing` swings the nose toward screen-left — turnRight must decrease it.
+    if (turnLeft) player.facing += TURN_SPEED;
+    if (turnRight) player.facing -= TURN_SPEED;
     player.facing = ((player.facing % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
     let moveDir = 0;
