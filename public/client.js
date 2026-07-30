@@ -750,14 +750,25 @@ const cameraFocus = new THREE.Vector3(mapWidth / 2, 8, mapHeight / 2);
 let cameraOrbitAngle = 0;
 const cameraShake = { until: 0, duration: 1, magnitude: 0 };
 
+const CAMERA_ZOOM_MIN = 0.4;
+const CAMERA_ZOOM_MAX = 2.2;
+let cameraZoom = 1;
+
+canvas.addEventListener('wheel', (e) => {
+  if (!gameActive) return;
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 1.08 : 1 / 1.08;
+  cameraZoom = Math.min(CAMERA_ZOOM_MAX, Math.max(CAMERA_ZOOM_MIN, cameraZoom * factor));
+}, { passive: false });
+
 function updateCamera(dt) {
   const me = avatars.get(myId);
   if (!me) return;
 
   let targetX = me.renderPos.x;
   let targetZ = me.renderPos.z;
-  let distance = 170;
-  let height = 150;
+  let distance = 170 * cameraZoom;
+  let height = 150 * cameraZoom;
   let orbiting = false;
   const desiredAngle = me.facing + Math.PI; // camera trails behind the direction the player faces
 
