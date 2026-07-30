@@ -58,11 +58,15 @@ nicknameInput.addEventListener('keydown', (e) => {
 });
 
 // ================= Input =================
-const keys = { up: false, down: false, left: false, right: false };
+// Tank-style controls: up/down move along the current facing direction,
+// left/right turn in place. This keeps the chase camera (which trails the
+// facing direction) consistent with what the arrow keys visually do —
+// world-locked movement fights a rotating camera as soon as you turn.
+const keys = { forward: false, backward: false, turnLeft: false, turnRight: false };
 const KEY_MAP = {
-  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-  w: 'up', s: 'down', a: 'left', d: 'right',
-  W: 'up', S: 'down', A: 'left', D: 'right',
+  ArrowUp: 'forward', ArrowDown: 'backward', ArrowLeft: 'turnLeft', ArrowRight: 'turnRight',
+  w: 'forward', s: 'backward', a: 'turnLeft', d: 'turnRight',
+  W: 'forward', S: 'backward', A: 'turnLeft', D: 'turnRight',
 };
 
 function sendInput() {
@@ -610,16 +614,17 @@ function buildAnimalModel(tier) {
 // ---- Avatars (live entities synced from server snapshots) ----
 const avatars = new Map();
 
-function ensureAvatar(id, tier, isMe) {
+function ensureAvatar(id, tier, isMe, isPlayer) {
   let av = avatars.get(id);
   if (!av) {
     const group = buildAnimalModel(tier);
     scene.add(group);
     av = {
-      group, tier, isMe,
+      group, tier, isMe, isPlayer,
       targetPos: { x: group.position.x, z: group.position.z },
       renderPos: { x: group.position.x, z: group.position.z },
       facing: 0,
+      targetFacing: 0,
       walkPhase: Math.random() * 10,
       busy: false,
       ring: null,
@@ -658,17 +663,18 @@ socket.on('world', (data) => {
 
   for (const npc of data.npcs) {
     seenIds.add(npc.id);
-    const av = ensureAvatar(npc.id, npc.tier, false);
+    const av = ensureAvatar(npc.id, npc.tier, false, false);
     av.targetPos.x = npc.x;
     av.targetPos.z = npc.y;
     av.busy = npc.busy;
   }
   for (const p of data.players) {
     seenIds.add(p.id);
-    const av = ensureAvatar(p.id, p.tier, p.id === myId);
+    const av = ensureAvatar(p.id, p.tier, p.id === myId, true);
     av.targetPos.x = p.x;
     av.targetPos.z = p.y;
     av.busy = p.busy;
+    av.targetFacing = p.facing;
   }
 
   for (const id of Array.from(avatars.keys())) {
@@ -816,7 +822,15 @@ function animate() {
     av.renderPos.x += dx * posEase;
     av.renderPos.z += dz * posEase;
 
-    if (moved > 0.4) {
+    if (av.isPlayer) {
+      // players turn on their own (tank controls) — facing comes from the
+      // server so it updates even while turning in place with no movement
+      let diff = av.targetFacing - av.facing;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      av.facing += diff * Math.min(1, dt * 10);
+      if (moved > 0.4) av.walkPhase += dt * 10;
+    } else if (moved > 0.4) {
+      // NPCs have no explicit facing — infer it from where they're walking
       const desiredFacing = Math.atan2(dx, dz);
       let diff = desiredFacing - av.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));

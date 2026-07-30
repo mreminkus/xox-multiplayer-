@@ -18,6 +18,7 @@ const MAP_WIDTH = 2400;
 const MAP_HEIGHT = 1600;
 const TICK_MS = 50; // 20 ticks/sec
 const PLAYER_SPEED = 4.2; // px per tick
+const TURN_SPEED = 0.15; // radians per tick
 const NPC_SPEED = 2.1; // px per tick
 const INTERACT_RANGE = 52;
 const MATING_DURATION_MS = 4000;
@@ -142,17 +143,28 @@ function tickNpcs() {
 }
 
 function tickPlayers() {
+  // tank-style controls: turning rotates facing in place, forward/backward always
+  // moves along the CURRENT facing direction. This keeps the chase camera (which
+  // trails the facing direction) consistent with what the arrow keys do — with
+  // world-locked movement the camera and controls fight each other once the
+  // player turns away from their original heading.
   for (const player of players.values()) {
     if (player.busy) continue;
-    const { up, down, left, right } = player.input;
-    let dx = (right ? 1 : 0) - (left ? 1 : 0);
-    let dy = (down ? 1 : 0) - (up ? 1 : 0);
-    if (dx === 0 && dy === 0) continue;
-    const len = Math.hypot(dx, dy);
-    dx /= len;
-    dy /= len;
-    player.x = clamp(player.x + dx * PLAYER_SPEED, EDGE_MARGIN, MAP_WIDTH - EDGE_MARGIN);
-    player.y = clamp(player.y + dy * PLAYER_SPEED, EDGE_MARGIN, MAP_HEIGHT - EDGE_MARGIN);
+    const { forward, backward, turnLeft, turnRight } = player.input;
+
+    if (turnLeft) player.facing -= TURN_SPEED;
+    if (turnRight) player.facing += TURN_SPEED;
+    player.facing = ((player.facing % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+
+    let moveDir = 0;
+    if (forward) moveDir += 1;
+    if (backward) moveDir -= 1;
+    if (moveDir === 0) continue;
+
+    const dx = Math.sin(player.facing) * PLAYER_SPEED * moveDir;
+    const dz = Math.cos(player.facing) * PLAYER_SPEED * moveDir;
+    player.x = clamp(player.x + dx, EDGE_MARGIN, MAP_WIDTH - EDGE_MARGIN);
+    player.y = clamp(player.y + dz, EDGE_MARGIN, MAP_HEIGHT - EDGE_MARGIN);
   }
 }
 
@@ -173,6 +185,7 @@ function broadcastWorld() {
       x: Math.round(p.x),
       y: Math.round(p.y),
       busy: p.busy,
+      facing: p.facing,
     })),
   };
   io.emit('world', payload);
@@ -293,7 +306,8 @@ io.on('connection', (socket) => {
       score: 0,
       x: pos.x,
       y: pos.y,
-      input: { up: false, down: false, left: false, right: false },
+      facing: Math.random() * Math.PI * 2,
+      input: { forward: false, backward: false, turnLeft: false, turnRight: false },
       busy: false,
       matingSession: null,
     };
@@ -313,10 +327,10 @@ io.on('connection', (socket) => {
     const player = players.get(socket.id);
     if (!player || player.busy) return;
     player.input = {
-      up: Boolean(state && state.up),
-      down: Boolean(state && state.down),
-      left: Boolean(state && state.left),
-      right: Boolean(state && state.right),
+      forward: Boolean(state && state.forward),
+      backward: Boolean(state && state.backward),
+      turnLeft: Boolean(state && state.turnLeft),
+      turnRight: Boolean(state && state.turnRight),
     };
   });
 
