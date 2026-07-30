@@ -21,6 +21,9 @@ const matingBanner = document.getElementById('mating-banner');
 const matingBannerText = document.getElementById('mating-banner-text');
 const matingBannerBar = document.getElementById('mating-banner-bar');
 
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+
 let gameActive = false;
 let myId = null;
 let mapWidth = 2400;
@@ -329,6 +332,89 @@ function updatePonds(t) {
   for (const mesh of pondMeshes) {
     mesh.material.opacity = 0.72 + Math.sin(t * 1.4 + mesh.userData.phase) * 0.1;
   }
+}
+
+// ---- Minimap (bottom-right, full-map overview; click top/bottom to zoom) ----
+const MINIMAP_MIN_ZOOM = 1;
+const MINIMAP_MAX_ZOOM = 6;
+let minimapZoom = MINIMAP_MIN_ZOOM;
+
+minimapCanvas.addEventListener('click', (e) => {
+  const rect = minimapCanvas.getBoundingClientRect();
+  const clickY = e.clientY - rect.top;
+  if (clickY < rect.height / 2) {
+    minimapZoom = Math.min(MINIMAP_MAX_ZOOM, minimapZoom * 1.35);
+  } else {
+    minimapZoom = Math.max(MINIMAP_MIN_ZOOM, minimapZoom / 1.35);
+  }
+});
+
+function drawMinimap() {
+  const w = minimapCanvas.width;
+  const h = minimapCanvas.height;
+
+  minimapCtx.fillStyle = '#4c7a34';
+  minimapCtx.fillRect(0, 0, w, h);
+
+  const me = avatars.get(myId);
+  const centerX = me ? me.renderPos.x : mapWidth / 2;
+  const centerZ = me ? me.renderPos.z : mapHeight / 2;
+
+  const viewW = mapWidth / minimapZoom;
+  const viewH = mapHeight / minimapZoom;
+  const halfW = viewW / 2;
+  const halfH = viewH / 2;
+  const cx = Math.max(halfW, Math.min(mapWidth - halfW, centerX));
+  const cz = Math.max(halfH, Math.min(mapHeight - halfH, centerZ));
+  const minX = cx - halfW;
+  const minZ = cz - halfH;
+
+  const toMini = (wx, wz) => ({ x: ((wx - minX) / viewW) * w, y: ((wz - minZ) / viewH) * h });
+
+  minimapCtx.fillStyle = 'rgba(63,140,189,0.9)';
+  for (const pond of pondMeshes) {
+    const p = toMini(pond.position.x, pond.position.z);
+    const rx = (pond.scale.x / viewW) * w;
+    const ry = (pond.scale.y / viewH) * h;
+    if (p.x < -rx || p.x > w + rx || p.y < -ry || p.y > h + ry) continue;
+    minimapCtx.beginPath();
+    minimapCtx.ellipse(p.x, p.y, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+    minimapCtx.fill();
+  }
+
+  minimapCtx.fillStyle = 'rgba(255,255,255,0.4)';
+  for (const npc of world.npcs) {
+    const p = toMini(npc.x, npc.y);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+    minimapCtx.beginPath();
+    minimapCtx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+    minimapCtx.fill();
+  }
+
+  for (const pl of world.players) {
+    if (pl.id === myId) continue;
+    const p = toMini(pl.x, pl.y);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+    minimapCtx.fillStyle = '#ff8fab';
+    minimapCtx.beginPath();
+    minimapCtx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+    minimapCtx.fill();
+  }
+
+  if (me) {
+    const p = toMini(me.renderPos.x, me.renderPos.z);
+    minimapCtx.fillStyle = '#6c8dff';
+    minimapCtx.beginPath();
+    minimapCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    minimapCtx.fill();
+    minimapCtx.strokeStyle = '#ffffff';
+    minimapCtx.lineWidth = 1.5;
+    minimapCtx.stroke();
+  }
+
+  minimapCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+  minimapCtx.lineWidth = 2;
+  minimapCtx.strokeRect(1, 1, w - 2, h - 2);
 }
 
 // ---- Animal models (stylized low-poly, built from primitives) ----
@@ -758,7 +844,9 @@ function animate() {
     }
 
     av.group.position.set(av.renderPos.x + extraX, bounce, av.renderPos.z + extraZ);
-    av.group.rotation.y = matingFacing !== null ? matingFacing : av.facing;
+    // models face local +X; av.facing/matingFacing use a compass-style angle (sin=dx, cos=dz),
+    // so a -90° correction is needed to align the model's nose with the actual movement direction
+    av.group.rotation.y = (matingFacing !== null ? matingFacing : av.facing) - Math.PI / 2;
     av.group.rotation.z = tilt;
 
     if (av.group.userData.legs) {
@@ -776,6 +864,7 @@ function animate() {
   updateCamera(dt);
   updateHeartParticles(t);
   updatePonds(t);
+  drawMinimap();
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

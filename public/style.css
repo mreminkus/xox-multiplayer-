@@ -227,6 +227,37 @@ input:focus {
   transform: translateY(0);
 }
 
+/* ---- Minimap ---- */
+.minimap-wrap {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+#minimap {
+  width: 170px;
+  height: 170px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  background: #4c7a34;
+}
+
+.minimap-hint {
+  font-size: 0.62rem;
+  color: rgba(240, 241, 245, 0.8);
+  background: rgba(20, 24, 32, 0.6);
+  padding: 3px 9px;
+  border-radius: 8px;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* ---- Mating banner (camera zooms into the pair on canvas; this is just a status pill) ---- */
 .mating-banner {
   position: absolute;
