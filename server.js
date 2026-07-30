@@ -326,29 +326,30 @@ io.on('connection', (socket) => {
 
     let best = null;
     let bestDist = Infinity;
+    let nearbyTooStrong = false;
 
-    for (const npc of npcs.values()) {
-      if (npc.busy) continue;
-      if (!canMateWith(player.tier, npc.tier)) continue;
-      const d = dist(player, npc);
-      if (d <= INTERACT_RANGE && d < bestDist) {
-        best = { type: 'npc', ref: npc };
-        bestDist = d;
+    const consider = (type, ref) => {
+      if (ref.busy) return;
+      const d = dist(player, ref);
+      if (d > INTERACT_RANGE) return;
+      if (canMateWith(player.tier, ref.tier)) {
+        if (d < bestDist) {
+          best = { type, ref };
+          bestDist = d;
+        }
+      } else if (ref.tier > player.tier) {
+        nearbyTooStrong = true;
       }
-    }
+    };
 
+    for (const npc of npcs.values()) consider('npc', npc);
     for (const other of players.values()) {
-      if (other.id === player.id || other.busy) continue;
-      if (!canMateWith(player.tier, other.tier)) continue;
-      const d = dist(player, other);
-      if (d <= INTERACT_RANGE && d < bestDist) {
-        best = { type: 'player', ref: other };
-        bestDist = d;
-      }
+      if (other.id === player.id) continue;
+      consider('player', other);
     }
 
     if (!best) {
-      socket.emit('interact_fail');
+      socket.emit('interact_fail', { reason: nearbyTooStrong ? 'too_strong' : 'none' });
       return;
     }
 

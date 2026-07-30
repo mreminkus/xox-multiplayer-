@@ -129,6 +129,9 @@ let matingTimer = null;
 
 socket.on('mating_start', ({ partnerName, partnerId, partnerType, duration }) => {
   matingActive = { partnerId, partnerType, partnerName };
+  cameraShake.until = performance.now() + 350;
+  cameraShake.duration = 350;
+  cameraShake.magnitude = 9;
 
   matingBannerText.textContent = `${partnerName} ile çiftleşiyor... ❤️`;
   matingBannerBar.style.transition = 'none';
@@ -160,8 +163,12 @@ socket.on('mating_end', ({ points, evolved, interrupted }) => {
   }
 });
 
-socket.on('interact_fail', () => {
-  showToast('Yakında uygun bir eş yok.');
+socket.on('interact_fail', (info) => {
+  if (info && info.reason === 'too_strong') {
+    showToast('Bu hayvan senden çok güçlü — önce evrimleşmen lazım. 😬');
+  } else {
+    showToast('Yakında uygun bir eş yok.');
+  }
 });
 
 // ================= Three.js scene =================
@@ -649,6 +656,7 @@ function updateHeartParticles(t) {
 // ---- Camera: elevated follow cam, cinematic orbit + zoom while mating ----
 const cameraFocus = new THREE.Vector3(mapWidth / 2, 8, mapHeight / 2);
 let cameraOrbitAngle = 0;
+const cameraShake = { until: 0, duration: 1, magnitude: 0 };
 
 function updateCamera(dt) {
   const me = avatars.get(myId);
@@ -659,6 +667,7 @@ function updateCamera(dt) {
   let distance = 170;
   let height = 150;
   let orbiting = false;
+  const desiredAngle = me.facing + Math.PI; // camera trails behind the direction the player faces
 
   if (matingActive) {
     const partner = avatars.get(matingActive.partnerId);
@@ -678,11 +687,24 @@ function updateCamera(dt) {
 
   if (orbiting) {
     cameraOrbitAngle += dt * 0.4;
+  } else {
+    let diff = desiredAngle - cameraOrbitAngle;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    cameraOrbitAngle += diff * Math.min(1, dt * 3.5);
   }
-  const angle = orbiting ? cameraOrbitAngle : Math.PI * 0.15;
+  const angle = cameraOrbitAngle;
 
-  const camX = cameraFocus.x + Math.sin(angle) * distance;
-  const camZ = cameraFocus.z + Math.cos(angle) * distance;
+  let camX = cameraFocus.x + Math.sin(angle) * distance;
+  let camZ = cameraFocus.z + Math.cos(angle) * distance;
+
+  const now = performance.now();
+  if (cameraShake.until > now) {
+    const remain = (cameraShake.until - now) / cameraShake.duration;
+    const mag = cameraShake.magnitude * remain;
+    camX += (Math.random() - 0.5) * mag;
+    camZ += (Math.random() - 0.5) * mag;
+  }
+
   const camEase = Math.min(1, dt * 4);
   camera.position.x += (camX - camera.position.x) * camEase;
   camera.position.z += (camZ - camera.position.z) * camEase;
@@ -719,16 +741,25 @@ function animate() {
     let extraX = 0;
     let extraZ = 0;
     let bounce = 0;
+    let matingFacing = null;
+    let tilt = 0;
     if (av.busy) {
-      const orbitR = 6;
+      // playful courting circle: both animals orbit their shared midpoint,
+      // always turned to face each other — lively but entirely non-explicit
+      const orbitR = 11;
+      const spinSpeed = 2.3;
       const phaseOffset = av.isMe ? 0 : Math.PI;
-      extraX = Math.cos(t * 2 + phaseOffset) * orbitR * 0.3;
-      extraZ = Math.sin(t * 2 + phaseOffset) * orbitR * 0.3;
-      bounce = Math.abs(Math.sin(t * 4)) * 2;
+      const orbitAngle = t * spinSpeed + phaseOffset;
+      extraX = Math.cos(orbitAngle) * orbitR;
+      extraZ = Math.sin(orbitAngle) * orbitR;
+      bounce = Math.abs(Math.sin(t * 5.5)) * 2.5;
+      matingFacing = Math.atan2(-extraX, -extraZ);
+      tilt = Math.sin(t * 5.5 + phaseOffset) * 0.14;
     }
 
     av.group.position.set(av.renderPos.x + extraX, bounce, av.renderPos.z + extraZ);
-    av.group.rotation.y = av.facing;
+    av.group.rotation.y = matingFacing !== null ? matingFacing : av.facing;
+    av.group.rotation.z = tilt;
 
     if (av.group.userData.legs) {
       const swing = Math.sin(av.walkPhase) * (moved > 0.4 ? 0.5 : 0.05);
