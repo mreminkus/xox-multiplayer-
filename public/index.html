@@ -3,71 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>XOX - Multiplayer</title>
+<title>Safari Evrim - Multiplayer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <header>
-      <h1>XOX</h1>
-      <p class="subtitle">Arkadaşınla ya da rastgele biriyle online oyna</p>
-    </header>
-
-    <section id="screen-login" class="screen active">
+  <section id="screen-login" class="login-screen active">
+    <div class="login-card">
+      <h1>🦁 Safari Evrim</h1>
+      <p class="subtitle">En güçsüz hayvan olarak başla, çiftleş, evrimleş.</p>
       <label for="nickname">Nickname</label>
       <input id="nickname" maxlength="20" placeholder="Adını yaz..." autocomplete="off">
-      <div class="actions">
-        <button id="btn-quick-match" class="btn primary">Hızlı Eşleş</button>
-      </div>
-      <div class="divider">veya</div>
-      <div class="room-actions">
-        <button id="btn-create-room" class="btn secondary">Oda Kur</button>
-        <div class="join-row">
-          <input id="room-code-input" maxlength="5" placeholder="ODA KODU" autocomplete="off">
-          <button id="btn-join-room" class="btn secondary">Katıl</button>
-        </div>
-      </div>
+      <button id="btn-join" class="btn primary">Safariye Katıl</button>
       <p id="login-error" class="error"></p>
-    </section>
+      <p class="hint">Yön tuşları (veya WASD): Hareket &nbsp;•&nbsp; Space: Çiftleş</p>
+    </div>
+  </section>
 
-    <section id="screen-waiting" class="screen">
-      <div class="spinner"></div>
-      <p id="waiting-text">Rakip aranıyor...</p>
-      <button id="btn-cancel-wait" class="btn ghost">İptal</button>
-    </section>
+  <section id="screen-game" class="game-screen">
+    <canvas id="canvas"></canvas>
 
-    <section id="screen-room-code" class="screen">
-      <p>Oda kodun:</p>
-      <div class="room-code-display" id="room-code-display"></div>
-      <p class="hint">Bu kodu arkadaşına gönder, o da "Katıl" ile girsin.</p>
-      <button id="btn-cancel-room" class="btn ghost">İptal</button>
-    </section>
+    <div class="hud">
+      <div class="hud-card">
+        <div class="hud-animal">
+          <span id="hud-emoji" class="hud-emoji"></span>
+          <div>
+            <div id="hud-name" class="hud-name"></div>
+            <div id="hud-score" class="hud-score"></div>
+          </div>
+        </div>
+        <div class="progress"><div id="hud-progress-bar" class="progress-bar"></div></div>
+        <div id="hud-unlock" class="hud-unlock" hidden>🔓 Üst kademeyle çiftleşme açık</div>
+      </div>
+    </div>
 
-    <section id="screen-game" class="screen">
-      <div class="players-bar">
-        <div class="player-tag" id="player-you">Sen</div>
-        <div class="turn-indicator" id="turn-indicator"></div>
-        <div class="player-tag" id="player-opponent">Rakip</div>
+    <div class="controls-hint">Yön tuşları: Hareket &nbsp;•&nbsp; Space: Çiftleş</div>
+
+    <div id="toast" class="toast"></div>
+
+    <div id="mating-overlay" class="mating-overlay" hidden>
+      <div class="mating-box">
+        <div class="mating-animals">
+          <span id="mating-me" class="mating-emoji"></span>
+          <span class="mating-hearts">❤️</span>
+          <span id="mating-partner" class="mating-emoji"></span>
+        </div>
+        <p id="mating-text">Çiftleşiyor...</p>
+        <div class="mating-progress"><div id="mating-progress-bar" class="mating-progress-bar"></div></div>
       </div>
-      <div class="board" id="board">
-        <button class="cell" data-index="0"></button>
-        <button class="cell" data-index="1"></button>
-        <button class="cell" data-index="2"></button>
-        <button class="cell" data-index="3"></button>
-        <button class="cell" data-index="4"></button>
-        <button class="cell" data-index="5"></button>
-        <button class="cell" data-index="6"></button>
-        <button class="cell" data-index="7"></button>
-        <button class="cell" data-index="8"></button>
-      </div>
-      <p id="game-message" class="message"></p>
-      <p id="opponent-left-msg" class="error" hidden>Rakip odadan ayrıldı.</p>
-      <div class="game-actions">
-        <button id="btn-rematch" class="btn primary" hidden>Tekrar Oyna</button>
-        <button id="btn-leave" class="btn ghost">Lobiye Dön</button>
-      </div>
-    </section>
-  </div>
+    </div>
+  </section>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="config.js"></script>

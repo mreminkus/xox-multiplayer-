@@ -1,30 +1,68 @@
 const socket = io(window.XOX_SERVER_URL || undefined);
 
-const screens = {
-  login: document.getElementById('screen-login'),
-  waiting: document.getElementById('screen-waiting'),
-  roomCode: document.getElementById('screen-room-code'),
-  game: document.getElementById('screen-game'),
-};
-
-function showScreen(name) {
-  Object.values(screens).forEach((s) => s.classList.remove('active'));
-  screens[name].classList.add('active');
-}
-
+const screenLogin = document.getElementById('screen-login');
+const screenGame = document.getElementById('screen-game');
 const nicknameInput = document.getElementById('nickname');
 const loginError = document.getElementById('login-error');
-const roomCodeInput = document.getElementById('room-code-input');
-const cells = Array.from(document.querySelectorAll('.cell'));
-const turnIndicator = document.getElementById('turn-indicator');
-const playerYouEl = document.getElementById('player-you');
-const playerOppEl = document.getElementById('player-opponent');
-const gameMessage = document.getElementById('game-message');
-const btnRematch = document.getElementById('btn-rematch');
-const opponentLeftMsg = document.getElementById('opponent-left-msg');
+const btnJoin = document.getElementById('btn-join');
 
-let currentState = null;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 
+const hudEmoji = document.getElementById('hud-emoji');
+const hudName = document.getElementById('hud-name');
+const hudScore = document.getElementById('hud-score');
+const hudProgressBar = document.getElementById('hud-progress-bar');
+const hudUnlock = document.getElementById('hud-unlock');
+const toast = document.getElementById('toast');
+
+const matingOverlay = document.getElementById('mating-overlay');
+const matingMe = document.getElementById('mating-me');
+const matingPartner = document.getElementById('mating-partner');
+const matingText = document.getElementById('mating-text');
+const matingProgressBar = document.getElementById('mating-progress-bar');
+
+let gameActive = false;
+let myId = null;
+let mapWidth = 2400;
+let mapHeight = 1600;
+let animals = [];
+let tierThresholds = [0];
+let upbreedMinTier = 4;
+
+let world = { npcs: [], players: [] };
+let myTier = 1;
+let myScore = 0;
+
+// ---- Decorative background (deterministic, purely cosmetic) ----
+const DECOR_SYMBOLS = ['🌳', '🌳', '🌿', '🪨', '🌵'];
+let decorations = [];
+function buildDecorations() {
+  decorations = [];
+  let seed = 42;
+  const rand = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+  const count = Math.floor((mapWidth * mapHeight) / 55000);
+  for (let i = 0; i < count; i += 1) {
+    decorations.push({
+      x: rand() * mapWidth,
+      y: rand() * mapHeight,
+      symbol: DECOR_SYMBOLS[Math.floor(rand() * DECOR_SYMBOLS.length)],
+      size: 22 + rand() * 18,
+    });
+  }
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ---- Login ----
 function getNickname() {
   const val = nicknameInput.value.trim();
   if (!val) {
@@ -35,130 +73,232 @@ function getNickname() {
   return val;
 }
 
-document.getElementById('btn-quick-match').addEventListener('click', () => {
+btnJoin.addEventListener('click', () => {
   const nickname = getNickname();
   if (!nickname) return;
-  socket.emit('find_match', { nickname });
-  document.getElementById('waiting-text').textContent = 'Rakip aranıyor...';
-  showScreen('waiting');
-});
-
-document.getElementById('btn-cancel-wait').addEventListener('click', () => {
-  socket.emit('cancel_find_match');
-  showScreen('login');
-});
-
-document.getElementById('btn-create-room').addEventListener('click', () => {
-  const nickname = getNickname();
-  if (!nickname) return;
-  socket.emit('create_room', { nickname });
-});
-
-document.getElementById('btn-join-room').addEventListener('click', () => {
-  const nickname = getNickname();
-  if (!nickname) return;
-  const code = roomCodeInput.value.trim().toUpperCase();
-  if (!code) {
-    loginError.textContent = 'Oda kodu gir.';
-    return;
-  }
-  socket.emit('join_room', { nickname, code });
-});
-
-document.getElementById('btn-cancel-room').addEventListener('click', () => {
-  socket.emit('leave_room');
-  showScreen('login');
-});
-
-document.getElementById('btn-leave').addEventListener('click', () => {
-  socket.emit('leave_room');
-  currentState = null;
-  showScreen('login');
-});
-
-btnRematch.addEventListener('click', () => {
-  socket.emit('rematch');
-});
-
-roomCodeInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-join-room').click();
+  socket.emit('join', { nickname });
 });
 
 nicknameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-quick-match').click();
+  if (e.key === 'Enter') btnJoin.click();
 });
 
-cells.forEach((cell) => {
-  cell.addEventListener('click', () => {
-    if (!currentState || !currentState.you) return;
-    const index = Number(cell.dataset.index);
-    if (currentState.board[index]) return;
-    if (currentState.result) return;
-    if (currentState.turn !== currentState.you.symbol) return;
-    socket.emit('make_move', { index });
-  });
+socket.on('joined', (data) => {
+  myId = data.id;
+  mapWidth = data.mapWidth;
+  mapHeight = data.mapHeight;
+  animals = data.animals;
+  tierThresholds = data.tierThresholds;
+  upbreedMinTier = data.upbreedMinTier;
+
+  buildDecorations();
+  screenLogin.classList.remove('active');
+  screenGame.classList.add('active');
+  gameActive = true;
+  requestAnimationFrame(renderLoop);
 });
 
-socket.on('waiting_for_match', () => {
-  showScreen('waiting');
-});
+// ---- Input ----
+const keys = { up: false, down: false, left: false, right: false };
+const KEY_MAP = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+  w: 'up', s: 'down', a: 'left', d: 'right',
+  W: 'up', S: 'down', A: 'left', D: 'right',
+};
 
-socket.on('room_created', ({ code }) => {
-  document.getElementById('room-code-display').textContent = code;
-  showScreen('roomCode');
-});
+function sendInput() {
+  socket.emit('input', keys);
+}
 
-socket.on('join_error', ({ message }) => {
-  loginError.textContent = message;
-});
-
-socket.on('opponent_left', () => {
-  opponentLeftMsg.hidden = false;
-  btnRematch.hidden = true;
-});
-
-socket.on('room_update', (state) => {
-  currentState = state;
-
-  if (!state.opponent) {
-    document.getElementById('room-code-display').textContent = state.code;
-    showScreen('roomCode');
+window.addEventListener('keydown', (e) => {
+  if (!gameActive) return;
+  const mapped = KEY_MAP[e.key];
+  if (mapped) {
+    if (!keys[mapped]) {
+      keys[mapped] = true;
+      sendInput();
+    }
+    e.preventDefault();
     return;
   }
-
-  opponentLeftMsg.hidden = true;
-  showScreen('game');
-  playerYouEl.textContent = `${state.you.nickname} (${state.you.symbol})`;
-  playerOppEl.textContent = `${state.opponent.nickname} (${state.opponent.symbol})`;
-
-  cells.forEach((cell, i) => {
-    cell.textContent = state.board[i] || '';
-    cell.classList.remove('win');
-    cell.disabled = Boolean(state.board[i]) || Boolean(state.result);
-  });
-
-  if (state.result) {
-    if (state.result.winner === 'draw') {
-      gameMessage.textContent = 'Berabere!';
-    } else if (state.result.winner === state.you.symbol) {
-      gameMessage.textContent = 'Kazandın! 🎉';
-    } else {
-      gameMessage.textContent = 'Kaybettin.';
-    }
-    if (state.result.line) {
-      state.result.line.forEach((i) => cells[i].classList.add('win'));
-    }
-    turnIndicator.textContent = '';
-    btnRematch.hidden = false;
-  } else {
-    btnRematch.hidden = true;
-    gameMessage.textContent = '';
-    turnIndicator.textContent = state.turn === state.you.symbol
-      ? 'Sıra sende'
-      : `Sıra ${state.opponent.nickname}'de`;
+  if (e.code === 'Space' && !e.repeat) {
+    socket.emit('interact');
+    e.preventDefault();
   }
 });
 
-socket.on('disconnect', () => {
-  gameMessage.textContent = 'Bağlantı koptu, sayfayı yenile.';
+window.addEventListener('keyup', (e) => {
+  if (!gameActive) return;
+  const mapped = KEY_MAP[e.key];
+  if (mapped) {
+    keys[mapped] = false;
+    sendInput();
+    e.preventDefault();
+  }
 });
+
+// ---- World updates ----
+socket.on('world', (data) => {
+  world = data;
+  const me = world.players.find((p) => p.id === myId);
+  if (me) {
+    myTier = me.tier;
+    myScore = me.score;
+    updateHud();
+  }
+});
+
+function updateHud() {
+  const animal = animals[myTier];
+  if (!animal) return;
+  hudEmoji.textContent = animal.emoji;
+  hudName.textContent = `${animal.name} (Kademe ${myTier})`;
+  hudScore.textContent = `${myScore} puan`;
+
+  const base = tierThresholds[myTier - 1] || 0;
+  const next = tierThresholds[myTier];
+  if (next === undefined) {
+    hudProgressBar.style.width = '100%';
+  } else {
+    const pct = Math.max(0, Math.min(1, (myScore - base) / (next - base)));
+    hudProgressBar.style.width = `${pct * 100}%`;
+  }
+
+  hudUnlock.hidden = myTier < upbreedMinTier;
+}
+
+// ---- Mating ----
+let matingTimer = null;
+
+socket.on('mating_start', ({ partnerName, partnerTier, duration }) => {
+  const myAnimal = animals[myTier];
+  const partnerAnimal = animals[partnerTier];
+  matingMe.textContent = myAnimal ? myAnimal.emoji : '❓';
+  matingPartner.textContent = partnerAnimal ? partnerAnimal.emoji : '❓';
+  matingText.textContent = `${partnerName} ile çiftleşiyor...`;
+
+  matingProgressBar.style.transition = 'none';
+  matingProgressBar.style.width = '0%';
+  matingOverlay.hidden = false;
+  // force reflow so the transition below actually animates
+  void matingProgressBar.offsetWidth;
+  matingProgressBar.style.transition = `width ${duration}ms linear`;
+  matingProgressBar.style.width = '100%';
+
+  clearTimeout(matingTimer);
+  matingTimer = setTimeout(() => {
+    matingOverlay.hidden = true;
+  }, duration + 150);
+});
+
+socket.on('mating_end', ({ points, evolved, interrupted }) => {
+  matingOverlay.hidden = true;
+  clearTimeout(matingTimer);
+  if (interrupted) {
+    showToast('Eş bağlantıyı kesti, çiftleşme yarım kaldı.');
+    return;
+  }
+  const animal = animals[myTier];
+  if (evolved && animal) {
+    showToast(`+${points} puan! 🎉 ${animal.name}'e evrildin!`);
+  } else {
+    showToast(`+${points} puan!`);
+  }
+});
+
+socket.on('interact_fail', () => {
+  showToast('Yakında uygun bir eş yok.');
+});
+
+let toastTimer = null;
+function showToast(text) {
+  toast.textContent = text;
+  toast.classList.remove('show');
+  void toast.offsetWidth;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+// ---- Rendering ----
+function clampCam(pos, viewport, mapSize) {
+  if (viewport >= mapSize) return -(mapSize - viewport) / 2;
+  return Math.max(0, Math.min(pos - viewport / 2, mapSize - viewport));
+}
+
+function renderLoop() {
+  if (!gameActive) return;
+
+  const me = world.players.find((p) => p.id === myId);
+  const camX = me ? clampCam(me.x, canvas.width, mapWidth) : 0;
+  const camY = me ? clampCam(me.y, canvas.height, mapHeight) : 0;
+
+  ctx.fillStyle = '#2c4a24';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  const gridSize = 80;
+  const offX = -camX % gridSize;
+  const offY = -camY % gridSize;
+  for (let x = offX; x < canvas.width; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = offY; y < canvas.height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const d of decorations) {
+    const sx = d.x - camX;
+    const sy = d.y - camY;
+    if (sx < -40 || sx > canvas.width + 40 || sy < -40 || sy > canvas.height + 40) continue;
+    ctx.font = `${d.size}px serif`;
+    ctx.fillText(d.symbol, sx, sy);
+  }
+
+  for (const npc of world.npcs) {
+    drawEntity(npc.x - camX, npc.y - camY, animals[npc.tier], null, npc.busy, false);
+  }
+
+  for (const p of world.players) {
+    const isMe = p.id === myId;
+    drawEntity(p.x - camX, p.y - camY, animals[p.tier], p.nickname, p.busy, isMe);
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+function drawEntity(sx, sy, animal, label, busy, isMe) {
+  if (!animal) return;
+  if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) return;
+
+  if (isMe) {
+    ctx.beginPath();
+    ctx.arc(sx, sy, 26, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(108,141,255,0.8)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  ctx.font = '32px serif';
+  ctx.fillText(animal.emoji, sx, sy);
+
+  if (busy) {
+    ctx.font = '16px serif';
+    ctx.fillText('❤️', sx, sy - 26);
+  }
+
+  if (label) {
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = isMe ? '#6c8dff' : '#f0f1f5';
+    ctx.fillText(label, sx, sy + 26);
+  }
+}
