@@ -238,12 +238,16 @@ function startMating(player, target) {
   io.to(player.id).emit('mating_start', {
     partnerName: partnerLabel,
     partnerTier: target.ref.tier,
+    partnerId: target.ref.id,
+    partnerType: target.type,
     duration: MATING_DURATION_MS,
   });
   if (target.type === 'player') {
     io.to(target.ref.id).emit('mating_start', {
       partnerName: player.nickname,
       partnerTier: player.tier,
+      partnerId: player.id,
+      partnerType: 'player',
       duration: MATING_DURATION_MS,
     });
   }

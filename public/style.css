@@ -227,71 +227,44 @@ input:focus {
   transform: translateY(0);
 }
 
-/* ---- Mating overlay (abstract, no explicit content) ---- */
-.mating-overlay {
+/* ---- Mating banner (camera zooms into the pair on canvas; this is just a status pill) ---- */
+.mating-banner {
   position: absolute;
-  inset: 0;
-  background: rgba(10, 12, 18, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mating-box {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 28px 36px;
+  top: 16px;
+  left: 50%;
+  transform: translate(-50%, -14px);
+  background: rgba(27, 31, 43, 0.85);
+  border: 1px solid var(--win);
+  border-radius: 12px;
+  padding: 8px 18px;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  backdrop-filter: blur(4px);
 }
 
-.mating-animals {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  font-size: 3rem;
+.mating-banner.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
-.mating-emoji {
-  display: inline-block;
-  animation: nuzzle 0.6s ease-in-out infinite alternate;
-}
-
-#mating-partner {
-  animation-direction: alternate-reverse;
-}
-
-.mating-hearts {
-  font-size: 1.6rem;
-  animation: pulse 0.7s ease-in-out infinite;
-}
-
-@keyframes nuzzle {
-  from { transform: translateX(0) rotate(0deg); }
-  to { transform: translateX(6px) rotate(-6deg); }
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.3); opacity: 1; }
-}
-
-#mating-text {
-  margin: 14px 0 10px;
+#mating-banner-text {
   font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--win);
 }
 
-.mating-progress {
-  width: 220px;
-  height: 8px;
-  border-radius: 4px;
+.mating-banner-progress {
+  margin-top: 6px;
+  width: 200px;
+  height: 5px;
+  border-radius: 3px;
   background: #12141c;
   overflow: hidden;
 }
 
-.mating-progress-bar {
+.mating-banner-bar {
   height: 100%;
   width: 0%;
   background: var(--win);
